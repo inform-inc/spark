@@ -90,7 +90,8 @@ private[kinesis] class KinesisReceiver[T](
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T,
-    awsCredentialsOption: Option[SerializableAWSCredentials])
+    awsCredentialsOption: Option[SerializableAWSCredentials],
+    dynamoAwsCredentialsOption: Option[SerializableAWSCredentials])
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -149,8 +150,11 @@ private[kinesis] class KinesisReceiver[T](
     kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
     // KCL config instance
     val awsCredProvider = resolveAWSCredentialsProvider()
+    val dynamoCredProvider = resolveDynamoAWSCredentialsProvider()
+
     val kinesisClientLibConfiguration =
-      new KinesisClientLibConfiguration(checkpointAppName, streamName, awsCredProvider, workerId)
+      new KinesisClientLibConfiguration(checkpointAppName, streamName, awsCredProvider,
+        dynamoCredProvider, awsCredProvider, workerId)
       .withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream)
       .withTaskBackoffTimeMillis(500)
@@ -305,6 +309,20 @@ private[kinesis] class KinesisReceiver[T](
    */
   private def resolveAWSCredentialsProvider(): AWSCredentialsProvider = {
     awsCredentialsOption match {
+      case Some(awsCredentials) =>
+        logInfo("Using provided AWS credentials")
+        new AWSCredentialsProvider {
+          override def getCredentials: AWSCredentials = awsCredentials
+          override def refresh(): Unit = { }
+        }
+      case None =>
+        logInfo("Using DefaultAWSCredentialsProviderChain")
+        new DefaultAWSCredentialsProviderChain()
+    }
+  }
+
+  private def resolveDynamoAWSCredentialsProvider(): AWSCredentialsProvider = {
+    dynamoAwsCredentialsOption match {
       case Some(awsCredentials) =>
         logInfo("Using provided AWS credentials")
         new AWSCredentialsProvider {

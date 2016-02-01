@@ -39,7 +39,8 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T,
-    awsCredentialsOption: Option[SerializableAWSCredentials]
+    awsCredentialsOption: Option[SerializableAWSCredentials],
+    dynamoAwsCredentialsOption: Option[SerializableAWSCredentials]
   ) extends ReceiverInputDStream[T](_ssc) {
 
   private[streaming]
@@ -71,6 +72,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
 
   override def getReceiver(): Receiver[T] = {
     new KinesisReceiver(streamName, endpointUrl, regionName, initialPositionInStream,
-      checkpointAppName, checkpointInterval, storageLevel, messageHandler, awsCredentialsOption)
+      checkpointAppName, checkpointInterval, storageLevel, messageHandler, awsCredentialsOption,
+      dynamoAwsCredentialsOption)
   }
 }

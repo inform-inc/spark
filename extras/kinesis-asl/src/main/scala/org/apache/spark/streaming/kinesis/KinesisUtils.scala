@@ -16,6 +16,8 @@
  */
 package org.apache.spark.streaming.kinesis
 
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+
 import scala.reflect.ClassTag
 
 import com.amazonaws.regions.RegionUtils
@@ -73,7 +75,7 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, None)
+        cleanedHandler, None, None)
     }
   }
 
@@ -126,7 +128,8 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+        cleanedHandler, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)),
+        Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     }
   }
 
@@ -170,7 +173,62 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, None)
+        defaultMessageHandler, None, None)
+    }
+  }
+
+
+  /**
+   * Create an input stream that pulls messages from a Kinesis stream.
+   * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
+   *
+   * Note: The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
+   * gets the AWS credentials.
+   *
+   * @param ssc StreamingContext object
+   * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
+   *                        (KCL) to update DynamoDB
+   * @param streamName   Kinesis stream name
+   * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param regionName   Name of region used by the Kinesis Client Library (KCL) to update
+   *                     DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
+   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
+   *                                 worker's initial starting position in the stream.
+   *                                 The values are either the beginning of the stream
+   *                                 per Kinesis' limit of 24 hours
+   *                                 (InitialPositionInStream.TRIM_HORIZON) or
+   *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param storageLevel Storage level to use for storing the received objects.
+   *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   *
+   * @param awsAccessKeyId  AWS AccessKeyId for dynamo db (if null, will use
+   *                        DefaultAWSCredentialsProviderChain)
+   * @param awsSecretKey  AWS SecretKey for dynamo db (if null, will use
+   *                      DefaultAWSCredentialsProviderChain)
+   *
+   */
+  def createStreamWithDynamoCredentials[T: ClassTag](
+                    ssc: StreamingContext,
+                    kinesisAppName: String,
+                    streamName: String,
+                    endpointUrl: String,
+                    regionName: String,
+                    checkpointInterval: Duration,
+                    storageLevel: StorageLevel,
+                    messageHandler: Record => T,
+                    awsAccessKeyId: String,
+                    awsSecretKey: String
+                    ): ReceiverInputDStream[T] = {
+    // Setting scope to override receiver stream's scope of "receiver stream"
+    val cleanedHandler = ssc.sc.clean(messageHandler)
+    ssc.withNamedScope("kinesis stream") {
+      new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
+        InitialPositionInStream.LATEST, kinesisAppName, checkpointInterval, storageLevel,
+        cleanedHandler, None, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     }
   }
 
@@ -217,7 +275,8 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+        defaultMessageHandler, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)),
+        Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     }
   }
 
@@ -262,7 +321,7 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl,
         getRegionByEndpoint(endpointUrl), initialPositionInStream, ssc.sc.appName,
-        checkpointInterval, storageLevel, defaultMessageHandler, None)
+        checkpointInterval, storageLevel, defaultMessageHandler, None, None)
     }
   }
 
