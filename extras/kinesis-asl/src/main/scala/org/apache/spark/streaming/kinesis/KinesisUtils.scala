@@ -220,15 +220,23 @@ object KinesisUtils {
                     checkpointInterval: Duration,
                     storageLevel: StorageLevel,
                     messageHandler: Record => T,
-                    awsAccessKeyId: String,
-                    awsSecretKey: String
+                    kinesisCredentials: Option[(String, String)],
+                    dynamoCredentials: Option[(String, String)]
                     ): ReceiverInputDStream[T] = {
     // Setting scope to override receiver stream's scope of "receiver stream"
     val cleanedHandler = ssc.sc.clean(messageHandler)
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         InitialPositionInStream.LATEST, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, None, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+        cleanedHandler,
+        kinesisCredentials match {
+          case Some((key, pass)) => Option(SerializableAWSCredentials(key, pass))
+          case None => None
+        },
+        dynamoCredentials match {
+          case Some((key, pass)) => Option(SerializableAWSCredentials(key, pass))
+          case None => None
+        })
     }
   }
 
